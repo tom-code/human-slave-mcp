@@ -261,7 +261,9 @@ async fn submit_response(
     }
 }
 
-async fn get_history(State(pending): State<Arc<PendingState>>) -> Json<Vec<crate::state::HistoryEntry>> {
+async fn get_history(
+    State(pending): State<Arc<PendingState>>,
+) -> Json<Vec<crate::state::HistoryEntry>> {
     Json(pending.get_history().await)
 }
 

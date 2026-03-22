@@ -50,11 +50,15 @@ pub async fn run_telnet_listener(port: u16, pending: Arc<PendingState>) -> anyho
                     let trimmed = response.trim().to_string();
                     if let Err(e) = writer.write_all(b"\r\n").await {
                         tracing::error!("Write error to {}: {}", addr, e);
-                        pending.push_history(request.message.clone(), trimmed.clone()).await;
+                        pending
+                            .push_history(request.message.clone(), trimmed.clone())
+                            .await;
                         let _ = request.response_tx.send(trimmed);
                         break;
                     }
-                    pending.push_history(request.message.clone(), trimmed.clone()).await;
+                    pending
+                        .push_history(request.message.clone(), trimmed.clone())
+                        .await;
                     let _ = request.response_tx.send(trimmed);
                 }
                 Err(e) => {
