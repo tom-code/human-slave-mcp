@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use axum::{
-    Json, Router,
     extract::State,
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     routing::{get, post},
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 
@@ -146,14 +146,23 @@ struct RespondResponse {
 
 async fn index_page() -> (HeaderMap, &'static str) {
     let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/html; charset=utf-8"),
+    );
     (headers, HTML)
 }
 
 async fn get_pending(State(pending): State<Arc<PendingState>>) -> Json<PendingResponse> {
     match pending.peek_message().await {
-        Some(message) => Json(PendingResponse { pending: true, message: Some(message) }),
-        None => Json(PendingResponse { pending: false, message: None }),
+        Some(message) => Json(PendingResponse {
+            pending: true,
+            message: Some(message),
+        }),
+        None => Json(PendingResponse {
+            pending: false,
+            message: None,
+        }),
     }
 }
 
@@ -164,7 +173,13 @@ async fn submit_response(
     match pending.try_take().await {
         Some(req) => {
             let _ = req.response_tx.send(body.response);
-            (StatusCode::OK, Json(RespondResponse { ok: true, error: None }))
+            (
+                StatusCode::OK,
+                Json(RespondResponse {
+                    ok: true,
+                    error: None,
+                }),
+            )
         }
         None => (
             StatusCode::OK,

@@ -7,10 +7,7 @@ use tokio::{
 
 use crate::state::PendingState;
 
-pub async fn run_telnet_listener(
-    port: u16,
-    pending: Arc<PendingState>,
-) -> anyhow::Result<()> {
+pub async fn run_telnet_listener(port: u16, pending: Arc<PendingState>) -> anyhow::Result<()> {
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     tracing::info!("Telnet listener on port {}", port);
 
@@ -30,9 +27,7 @@ pub async fn run_telnet_listener(
 
             writer.write_all(b"--- Agent Request ---\r\n").await?;
             writer.write_all(request.message.as_bytes()).await?;
-            writer
-                .write_all(b"\r\n---------------------\r\n> ")
-                .await?;
+            writer.write_all(b"\r\n---------------------\r\n> ").await?;
             writer.flush().await?;
 
             let mut response = String::new();

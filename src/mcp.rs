@@ -1,9 +1,7 @@
 use rmcp::{
-    ErrorData as McpError,
-    ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{CallToolResult, Content, ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router,
+    schemars, tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler,
 };
 use serde::Deserialize;
 use tokio::sync::mpsc;
@@ -35,7 +33,9 @@ impl HumanBridge {
 
 #[tool_router]
 impl HumanBridge {
-    #[tool(description = "Send a message or question to the human operator and wait for their response. Use this when you need human input, clarification, or assistance.")]
+    #[tool(
+        description = "Send a message or question to the human operator and wait for their response. Use this when you need human input, clarification, or assistance."
+    )]
     async fn ask_human(
         &self,
         Parameters(AskHumanParams { message }): Parameters<AskHumanParams>,

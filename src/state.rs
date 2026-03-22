@@ -61,10 +61,7 @@ impl PendingState {
 /// Dispatcher: reads from the mpsc receiver and stores requests into PendingState.
 /// Waits for the current slot to be cleared before accepting the next request,
 /// preserving backpressure.
-pub async fn dispatch_requests(
-    mut rx: mpsc::Receiver<HumanRequest>,
-    pending: Arc<PendingState>,
-) {
+pub async fn dispatch_requests(mut rx: mpsc::Receiver<HumanRequest>, pending: Arc<PendingState>) {
     while let Some(request) = rx.recv().await {
         // Wait until the slot is empty
         loop {
