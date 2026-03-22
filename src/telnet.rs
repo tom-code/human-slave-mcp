@@ -1,14 +1,15 @@
+use std::sync::Arc;
+
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
-    sync::mpsc,
 };
 
-use crate::state::HumanRequest;
+use crate::state::PendingState;
 
 pub async fn run_telnet_listener(
     port: u16,
-    mut request_rx: mpsc::Receiver<HumanRequest>,
+    pending: Arc<PendingState>,
 ) -> anyhow::Result<()> {
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     tracing::info!("Telnet listener on port {}", port);
@@ -25,13 +26,7 @@ pub async fn run_telnet_listener(
             .await?;
 
         loop {
-            let request = match request_rx.recv().await {
-                Some(req) => req,
-                None => {
-                    tracing::info!("Request channel closed, shutting down");
-                    return Ok(());
-                }
-            };
+            let request = pending.wait_and_take().await;
 
             writer.write_all(b"--- Agent Request ---\r\n").await?;
             writer.write_all(request.message.as_bytes()).await?;

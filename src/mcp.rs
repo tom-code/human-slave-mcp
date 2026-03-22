@@ -49,7 +49,7 @@ impl HumanBridge {
 
         if self.request_tx.send(request).await.is_err() {
             return Ok(CallToolResult::error(vec![Content::text(
-                "Telnet listener is not running. Cannot reach human.",
+                "No listener is running. Cannot reach human.",
             )]));
         }
 
@@ -70,7 +70,7 @@ impl ServerHandler for HumanBridge {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             instructions: Some(
-                "This server routes your requests to a human operator via telnet. \
+                "This server routes your requests to a human operator via telnet or web browser. \
                  Use the ask_human tool to ask questions or get help."
                     .to_string(),
             ),
