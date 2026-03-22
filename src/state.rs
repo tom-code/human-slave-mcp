@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
@@ -13,6 +14,8 @@ pub struct HumanRequest {
 pub struct HistoryEntry {
     pub question: String,
     pub answer: String,
+    /// Unix timestamp (seconds) when the exchange was completed
+    pub timestamp: u64,
 }
 
 /// Shared state holding the current pending request, accessible by both telnet and web handlers
@@ -34,10 +37,21 @@ impl PendingState {
     }
 
     pub async fn push_history(&self, question: String, answer: String) {
-        self.history
-            .lock()
-            .await
-            .push(HistoryEntry { question, answer });
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let mut history = self.history.lock().await;
+        history.push(HistoryEntry {
+            question,
+            answer,
+            timestamp,
+        });
+        // Keep only the last 20 exchanges
+        if history.len() > 20 {
+            let drain_count = history.len() - 20;
+            history.drain(0..drain_count);
+        }
     }
 
     pub async fn get_history(&self) -> Vec<HistoryEntry> {

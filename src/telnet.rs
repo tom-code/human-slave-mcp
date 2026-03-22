@@ -25,10 +25,19 @@ pub async fn run_telnet_listener(port: u16, pending: Arc<PendingState>) -> anyho
         loop {
             let request = pending.wait_and_take().await;
 
-            writer.write_all(b"--- Agent Request ---\r\n").await?;
-            writer.write_all(request.message.as_bytes()).await?;
-            writer.write_all(b"\r\n---------------------\r\n> ").await?;
-            writer.flush().await?;
+            let write_result = async {
+                writer.write_all(b"--- Agent Request ---\r\n").await?;
+                writer.write_all(request.message.as_bytes()).await?;
+                writer.write_all(b"\r\n---------------------\r\n> ").await?;
+                writer.flush().await
+            }
+            .await;
+
+            if let Err(e) = write_result {
+                tracing::error!("Write error to {}: {}", addr, e);
+                drop(request.response_tx);
+                break;
+            }
 
             let mut response = String::new();
             match reader.read_line(&mut response).await {
@@ -39,7 +48,12 @@ pub async fn run_telnet_listener(port: u16, pending: Arc<PendingState>) -> anyho
                 }
                 Ok(_) => {
                     let trimmed = response.trim().to_string();
-                    writer.write_all(b"\r\n").await?;
+                    if let Err(e) = writer.write_all(b"\r\n").await {
+                        tracing::error!("Write error to {}: {}", addr, e);
+                        pending.push_history(request.message.clone(), trimmed.clone()).await;
+                        let _ = request.response_tx.send(trimmed);
+                        break;
+                    }
                     pending.push_history(request.message.clone(), trimmed.clone()).await;
                     let _ = request.response_tx.send(trimmed);
                 }

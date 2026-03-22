@@ -43,8 +43,9 @@ const HTML: &str = r#"<!DOCTYPE html>
   .history-entry { background: #222; border: 1px solid #333; border-radius: 4px; overflow: hidden; }
   .history-q { padding: 0.6rem 0.75rem; border-bottom: 1px solid #333; }
   .history-a { padding: 0.6rem 0.75rem; background: #1e2e1e; }
-  .history-q-label { font-size: 0.7rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+  .history-q-label { font-size: 0.7rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; display: flex; justify-content: space-between; }
   .history-a-label { font-size: 0.7rem; color: #4a7a4a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+  .history-time { font-size: 0.7rem; color: #555; text-transform: none; letter-spacing: 0; }
   .history-q-text { white-space: pre-wrap; word-break: break-word; line-height: 1.4; color: #ccc; font-size: 0.9rem; }
   .history-a-text { white-space: pre-wrap; word-break: break-word; line-height: 1.4; color: #8bc98b; font-size: 0.9rem; }
   #history-empty { font-size: 0.85rem; color: #444; }
@@ -124,13 +125,15 @@ async function refreshHistory() {
     // Show most recent at top
     for (let i = entries.length - 1; i >= 0; i--) {
       const e = entries[i];
+      const timeStr = e.timestamp ? new Date(e.timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'}) : '';
       const div = document.createElement('div');
       div.className = 'history-entry';
       div.innerHTML =
-        '<div class="history-q"><div class="history-q-label">Agent</div><div class="history-q-text"></div></div>' +
+        '<div class="history-q"><div class="history-q-label"><span>Agent</span><span class="history-time"></span></div><div class="history-q-text"></div></div>' +
         '<div class="history-a"><div class="history-a-label">You</div><div class="history-a-text"></div></div>';
       div.querySelector('.history-q-text').textContent = e.question;
       div.querySelector('.history-a-text').textContent = e.answer;
+      div.querySelector('.history-time').textContent = timeStr;
       list.appendChild(div);
     }
   } catch (_) {}
