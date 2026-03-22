@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use serde::Serialize;
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 
 /// A request from the agent to the human
@@ -8,11 +9,18 @@ pub struct HumanRequest {
     pub response_tx: oneshot::Sender<String>,
 }
 
+#[derive(Clone, Serialize)]
+pub struct HistoryEntry {
+    pub question: String,
+    pub answer: String,
+}
+
 /// Shared state holding the current pending request, accessible by both telnet and web handlers
 pub struct PendingState {
     inner: Mutex<Option<HumanRequest>>,
     new_request: Notify,
     slot_cleared: Notify,
+    history: Mutex<Vec<HistoryEntry>>,
 }
 
 impl PendingState {
@@ -21,7 +29,19 @@ impl PendingState {
             inner: Mutex::new(None),
             new_request: Notify::new(),
             slot_cleared: Notify::new(),
+            history: Mutex::new(Vec::new()),
         }
+    }
+
+    pub async fn push_history(&self, question: String, answer: String) {
+        self.history
+            .lock()
+            .await
+            .push(HistoryEntry { question, answer });
+    }
+
+    pub async fn get_history(&self) -> Vec<HistoryEntry> {
+        self.history.lock().await.clone()
     }
 
     /// Store a new request. Caller must ensure the slot is empty first.

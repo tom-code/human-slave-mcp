@@ -33,10 +33,26 @@ const HTML: &str = r#"<!DOCTYPE html>
   #feedback { margin-top: 0.75rem; font-size: 0.85rem; min-height: 1.2em; }
   #feedback.ok { color: #4caf50; }
   #feedback.err { color: #f44336; }
+  #server-status { font-size: 0.8rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.4rem; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.online { background: #4caf50; }
+  .dot.offline { background: #f44336; }
+  #history-section { margin-top: 2rem; border-top: 1px solid #333; padding-top: 1rem; }
+  #history-heading { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+  #history-list { display: flex; flex-direction: column; gap: 1rem; }
+  .history-entry { background: #222; border: 1px solid #333; border-radius: 4px; overflow: hidden; }
+  .history-q { padding: 0.6rem 0.75rem; border-bottom: 1px solid #333; }
+  .history-a { padding: 0.6rem 0.75rem; background: #1e2e1e; }
+  .history-q-label { font-size: 0.7rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+  .history-a-label { font-size: 0.7rem; color: #4a7a4a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+  .history-q-text { white-space: pre-wrap; word-break: break-word; line-height: 1.4; color: #ccc; font-size: 0.9rem; }
+  .history-a-text { white-space: pre-wrap; word-break: break-word; line-height: 1.4; color: #8bc98b; font-size: 0.9rem; }
+  #history-empty { font-size: 0.85rem; color: #444; }
 </style>
 </head>
 <body>
 <h1>slave-mcp &mdash; Human Interface</h1>
+<div id="server-status"><span id="server-dot" class="dot online"></span><span id="server-label">Server Online</span></div>
 <div id="status">Waiting for agent requests...</div>
 <div id="question-box">
   <div id="question-label">Agent request</div>
@@ -46,15 +62,32 @@ const HTML: &str = r#"<!DOCTYPE html>
 <button id="submit-btn" onclick="submitResponse()">Send Response</button>
 <div id="feedback"></div>
 
+<div id="history-section">
+  <div id="history-heading">History</div>
+  <div id="history-list"><div id="history-empty">No exchanges yet.</div></div>
+</div>
+
 <script>
 let polling = true;
 let hasPending = false;
+let serverOnline = true;
+let historyCount = 0;
+
+function setServerStatus(online) {
+  if (online === serverOnline) return;
+  serverOnline = online;
+  document.getElementById('server-dot').className = 'dot ' + (online ? 'online' : 'offline');
+  document.getElementById('server-label').textContent = online ? 'Server Online' : 'Server Offline';
+  if (!online) resetUI('Server offline.');
+  else if (document.getElementById('status').textContent === 'Server offline.') resetUI('');
+}
 
 async function poll() {
   if (!polling) return;
   try {
     const res = await fetch('/api/pending');
     const data = await res.json();
+    setServerStatus(true);
     if (data.pending && !hasPending) {
       hasPending = true;
       document.getElementById('status').textContent = 'Request pending — please respond:';
@@ -68,11 +101,39 @@ async function poll() {
       document.getElementById('feedback').textContent = '';
     } else if (!data.pending && hasPending) {
       resetUI('Request was handled elsewhere.');
+      refreshHistory();
     }
   } catch (e) {
-    // ignore transient errors
+    setServerStatus(false);
   }
   setTimeout(poll, 2000);
+}
+
+async function refreshHistory() {
+  try {
+    const res = await fetch('/api/history');
+    const entries = await res.json();
+    if (entries.length === historyCount) return;
+    historyCount = entries.length;
+    const list = document.getElementById('history-list');
+    if (entries.length === 0) {
+      list.innerHTML = '<div id="history-empty">No exchanges yet.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    // Show most recent at top
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i];
+      const div = document.createElement('div');
+      div.className = 'history-entry';
+      div.innerHTML =
+        '<div class="history-q"><div class="history-q-label">Agent</div><div class="history-q-text"></div></div>' +
+        '<div class="history-a"><div class="history-a-label">You</div><div class="history-a-text"></div></div>';
+      div.querySelector('.history-q-text').textContent = e.question;
+      div.querySelector('.history-a-text').textContent = e.answer;
+      list.appendChild(div);
+    }
+  } catch (_) {}
 }
 
 async function submitResponse() {
@@ -89,9 +150,11 @@ async function submitResponse() {
     if (data.ok) {
       resetUI('');
       setFeedback('Response sent.', 'ok');
+      refreshHistory();
     } else {
       resetUI('');
       setFeedback('Request already answered by another interface.', 'err');
+      refreshHistory();
     }
   } catch (e) {
     setFeedback('Error sending response: ' + e.message, 'err');
@@ -120,6 +183,7 @@ document.getElementById('response').addEventListener('keydown', function(e) {
 });
 
 poll();
+refreshHistory();
 </script>
 </body>
 </html>
@@ -172,6 +236,9 @@ async fn submit_response(
 ) -> (StatusCode, Json<RespondResponse>) {
     match pending.try_take().await {
         Some(req) => {
+            pending
+                .push_history(req.message.clone(), body.response.clone())
+                .await;
             let _ = req.response_tx.send(body.response);
             (
                 StatusCode::OK,
@@ -191,11 +258,16 @@ async fn submit_response(
     }
 }
 
+async fn get_history(State(pending): State<Arc<PendingState>>) -> Json<Vec<crate::state::HistoryEntry>> {
+    Json(pending.get_history().await)
+}
+
 pub async fn run_web_server(port: u16, pending: Arc<PendingState>) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(index_page))
         .route("/api/pending", get(get_pending))
         .route("/api/respond", post(submit_response))
+        .route("/api/history", get(get_history))
         .with_state(pending);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;

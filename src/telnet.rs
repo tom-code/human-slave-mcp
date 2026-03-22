@@ -40,6 +40,7 @@ pub async fn run_telnet_listener(port: u16, pending: Arc<PendingState>) -> anyho
                 Ok(_) => {
                     let trimmed = response.trim().to_string();
                     writer.write_all(b"\r\n").await?;
+                    pending.push_history(request.message.clone(), trimmed.clone()).await;
                     let _ = request.response_tx.send(trimmed);
                 }
                 Err(e) => {

@@ -73,13 +73,16 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Telnet interface on port {}", telnet_port);
     tracing::info!("Web interface on http://0.0.0.0:{}", web_port);
 
-    axum::serve(listener, router)
-        .with_graceful_shutdown(async {
-            tokio::signal::ctrl_c().await.ok();
-            tracing::info!("Shutting down...");
-        })
-        .await?;
+    let mcp_handle = tokio::spawn(async move {
+        if let Err(e) = axum::serve(listener, router).await {
+            tracing::error!("MCP server error: {}", e);
+        }
+    });
 
+    tokio::signal::ctrl_c().await.ok();
+    tracing::info!("Shutting down...");
+
+    mcp_handle.abort();
     telnet_handle.abort();
     web_handle.abort();
     dispatcher_handle.abort();
